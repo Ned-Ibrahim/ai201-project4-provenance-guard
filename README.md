@@ -19,6 +19,12 @@ python app.py   # serves on http://localhost:5001
 
 Port 5001 is used instead of 5000 because macOS AirPlay Receiver often occupies 5000.
 
+## Demo UI
+
+Open http://localhost:5001/ in a browser for a small demo interface on top of the API.
+It submits text, renders the verdict with the confidence value plotted against the 0.40 and 0.75 threshold bands, shows both signal scores with the stylometric sub-metrics, lets the creator file an appeal, and displays the live audit log.
+The API itself is unchanged; the page is a thin client over `/submit`, `/appeal`, and `/log`.
+
 ## API
 
 | Endpoint | Body | Returns |

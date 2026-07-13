@@ -9,7 +9,7 @@ Routes:
 
 import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -41,6 +41,12 @@ def _get_json_fields(*fields):
             return None, ({"error": f"'{field}' is required and must be a non-empty string"}, 400)
         values[field] = value
     return values, None
+
+
+@app.route("/")
+def index():
+    """Serve the demo UI: submit content, view the verdict, appeal, inspect the log."""
+    return render_template("index.html")
 
 
 @app.route("/submit", methods=["POST"])

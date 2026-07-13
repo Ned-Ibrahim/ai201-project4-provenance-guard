@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provenance Guard Demo</title>
+<style>
+  :root {
+    --surface: #fcfcfb;
+    --card: #ffffff;
+    --border: #e4e3df;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #8a897f;
+    --accent: #2a78d6;          /* neutral metric bars */
+    --track: #eeede9;
+    --ai: #e34948;              /* likely_ai */
+    --uncertain: #eda100;       /* uncertain */
+    --human: #008300;           /* likely_human */
+    --band-ai: rgba(227, 73, 72, 0.10);
+    --band-uncertain: rgba(237, 161, 0, 0.10);
+    --band-human: rgba(0, 131, 0, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19;
+      --card: #232322;
+      --border: #3a3936;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8a897f;
+      --accent: #3987e5;
+      --track: #31302e;
+      --ai: #e66767;
+      --uncertain: #c98500;
+      --human: #1baf7a;
+      --band-ai: rgba(230, 103, 103, 0.14);
+      --band-uncertain: rgba(201, 133, 0, 0.14);
+      --band-human: rgba(27, 175, 122, 0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--text-primary);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--text-secondary); margin: 0 0 24px; font-size: 14px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); margin: 0 0 12px; font-weight: 600; }
+  textarea, input[type=text] {
+    width: 100%; background: var(--surface); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font: inherit; resize: vertical;
+  }
+  textarea { min-height: 130px; }
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin: 12px 0 4px; }
+  button {
+    font: inherit; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text-primary); padding: 8px 14px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .samples button { font-size: 12px; padding: 5px 10px; color: var(--text-secondary); }
+  .actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+  .error {
+    display: none; margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--ai); color: var(--ai); font-size: 13px;
+  }
+
+  /* verdict */
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; font-weight: 600;
+    font-size: 13px; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--vc, var(--text-muted)); }
+  .conf-num { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .conf-cap { font-size: 12px; color: var(--text-muted); }
+
+  /* meter: single-value bar over threshold bands (human <=0.40 | uncertain | ai >=0.75) */
+  .meter { position: relative; height: 22px; border-radius: 6px; overflow: hidden;
+    background: var(--track); margin: 10px 0 4px; }
+  .meter .band { position: absolute; top: 0; bottom: 0; }
+  .meter .b-human { left: 0; width: 40%; background: var(--band-human); }
+  .meter .b-unc { left: 40%; width: 35%; background: var(--band-uncertain); }
+  .meter .b-ai { left: 75%; width: 25%; background: var(--band-ai); }
+  .meter .needle { position: absolute; top: 0; bottom: 0; width: 3px;
+    background: var(--vc, var(--text-primary)); border-radius: 2px;
+    transform: translateX(-50%); transition: left 0.4s ease; }
+  .meter .thresh { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .scale { display: flex; justify-content: space-between; font-size: 11px;
+    color: var(--text-muted); margin-bottom: 2px; }
+  .zones { display: flex; font-size: 11px; color: var(--text-muted); }
+  .zones span:nth-child(1) { width: 40%; }
+  .zones span:nth-child(2) { width: 35%; }
+  .zones span:nth-child(3) { width: 25%; text-align: right; }
+
+  .label-box {
+    margin-top: 14px; padding: 12px 14px; border-radius: 8px;
+    border-left: 3px solid var(--vc, var(--border));
+    background: var(--surface); font-size: 14px;
+  }
+
+  /* signal bars */
+  .sig { margin-top: 16px; }
+  .sig-row { display: grid; grid-template-columns: 120px 1fr 46px; gap: 10px;
+    align-items: center; margin-top: 8px; }
+  .sig-row .name { font-size: 12px; color: var(--text-secondary); }
+  .bar { height: 10px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent);
+    border-radius: 4px; transition: width 0.4s ease; }
+  .bar.mini { height: 6px; }
+  .sig-row .val { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .rationale { font-size: 12px; color: var(--text-muted); margin-top: 8px; font-style: italic; }
+
+  /* appeal + log */
+  #appealCard, #resultCard { display: none; }
+  .msg { margin-top: 10px; font-size: 13px; color: var(--human); display: none; }
+  .log-entry { border-top: 1px solid var(--border); padding: 9px 0; font-size: 13px; }
+  .log-entry:first-child { border-top: none; }
+  .log-entry .top { display: flex; gap: 8px; align-items: baseline; }
+  .log-entry .ev { font-weight: 600; }
+  .log-entry .time { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+  .log-entry .det { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+  code { background: var(--track); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Provenance Guard</h1>
+  <p class="sub">Submit a piece of writing. Two independent signals classify it, and the label a reader would see appears below.</p>
+
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h2>Submit content</h2>
+        <label for="creator">Creator ID</label>
+        <input type="text" id="creator" value="demo-writer">
+        <label for="text">Text (minimum 80 characters)</label>
+        <textarea id="text" placeholder="Paste a poem, story excerpt, or blog post…"></textarea>
+        <div class="samples">
+          <button onclick="sample('ai')">Sample: AI-sounding</button>
+          <button onclick="sample('human')">Sample: human-sounding</button>
+          <button onclick="sample('borderline')">Sample: borderline</button>
+        </div>
+        <div class="actions">
+          <button class="primary" id="submitBtn" onclick="submitText()">Analyze</button>
+          <span class="conf-cap" id="busy" style="display:none">calling both signals…</span>
+        </div>
+        <div class="error" id="submitError"></div>
+      </div>
+
+      <div class="card" id="appealCard" style="margin-top:20px">
+        <h2>Appeal this decision</h2>
+        <p class="conf-cap" style="margin:0">Appealing as the creator of <code id="appealCid"></code></p>
+        <label for="reason">Your reasoning</label>
+        <textarea id="reason" style="min-height:70px">I wrote this myself. My writing style may read as formal, but it is my own work.</textarea>
+        <div class="actions">
+          <button onclick="appeal()">Submit appeal</button>
+        </div>
+        <div class="msg" id="appealMsg"></div>
+        <div class="error" id="appealError"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" id="resultCard">
+        <h2>Verdict</h2>
+        <div style="display:flex; align-items:center; gap:14px">
+          <div>
+            <div class="conf-num" id="confNum">–</div>
+            <div class="conf-cap">confidence it is AI-generated</div>
+          </div>
+          <span class="chip" style="margin-left:auto"><span class="dot"></span><span id="attr">–</span></span>
+        </div>
+        <div class="scale"><span>0.0</span><span>0.40</span><span>0.75</span><span>1.0</span></div>
+        <div class="meter">
+          <span class="band b-human"></span><span class="band b-unc"></span><span class="band b-ai"></span>
+          <span class="thresh" style="left:40%"></span>
+          <span class="thresh" style="left:75%"></span>
+          <span class="needle" id="needle" style="left:0%"></span>
+        </div>
+        <div class="zones"><span>likely human</span><span>uncertain</span><span>likely AI</span></div>
+
+        <div class="label-box" id="labelBox"></div>
+
+        <div class="sig">
+          <h2 style="margin-bottom:2px">Signal breakdown</h2>
+          <div class="sig-row"><span class="name">LLM judgment</span><span class="bar"><i id="bLlm"></i></span><span class="val" id="vLlm">–</span></div>
+          <div class="sig-row"><span class="name">Stylometrics</span><span class="bar"><i id="bStylo"></i></span><span class="val" id="vStylo">–</span></div>
+          <div class="sig-row"><span class="name" style="padding-left:12px">burstiness</span><span class="bar mini"><i id="bBurst"></i></span><span class="val" id="vBurst">–</span></div>
+          <div class="sig-row"><span class="name" style="padding-left:12px">type-token ratio</span><span class="bar mini"><i id="bTtr"></i></span><span class="val" id="vTtr">–</span></div>
+          <div class="sig-row"><span class="name" style="padding-left:12px">informality</span><span class="bar mini"><i id="bInf"></i></span><span class="val" id="vInf">–</span></div>
+          <div class="rationale" id="rationale"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <h2 style="display:flex; align-items:center">Audit log <button style="margin-left:auto; font-size:12px; padding:4px 10px" onclick="loadLog()">Refresh</button></h2>
+        <div id="log"><span class="conf-cap">No entries loaded yet.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SAMPLES = {
+  ai: "Artificial intelligence represents a transformative paradigm shift in modern society. It is important to note that while the benefits of AI are numerous, it is equally essential to consider the ethical implications. Furthermore, stakeholders across various sectors must collaborate to ensure responsible deployment.",
+  human: "ok so i finally tried that new ramen place downtown and honestly? underwhelming. the broth was fine but they put WAY too much sodium in it and i was thirsty for like three hours after. my friend got the spicy version and said it was better. probably wont go back unless someone drags me there",
+  borderline: "The relationship between monetary policy and asset price inflation has been extensively studied in the literature. Central banks face a fundamental tension between their mandate for price stability and the unintended consequences of prolonged low interest rates on equity and real estate valuations."
+};
+const VC = { likely_ai: "var(--ai)", uncertain: "var(--uncertain)", likely_human: "var(--human)" };
+const NICE = { likely_ai: "Likely AI", uncertain: "Uncertain", likely_human: "Likely human" };
+let lastContentId = null;
+
+function sample(k) { document.getElementById("text").value = SAMPLES[k]; }
+
+function setBar(id, v) {
+  document.getElementById("b" + id).style.width = (v * 100) + "%";
+  document.getElementById("v" + id).textContent = v == null ? "n/a" : v.toFixed(2);
+}
+
+async function submitText() {
+  const err = document.getElementById("submitError");
+  err.style.display = "none";
+  document.getElementById("busy").style.display = "inline";
+  document.getElementById("submitBtn").disabled = true;
+  try {
+    const res = await fetch("/submit", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: document.getElementById("text").value,
+                             creator_id: document.getElementById("creator").value })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error + (d.detail ? " (" + d.detail + ")" : ""));
+    lastContentId = d.content_id;
+
+    const card = document.getElementById("resultCard");
+    card.style.display = "block";
+    card.style.setProperty("--vc", VC[d.attribution]);
+    document.getElementById("confNum").textContent = d.confidence.toFixed(2);
+    document.getElementById("attr").textContent = NICE[d.attribution];
+    document.getElementById("needle").style.left = (d.confidence * 100) + "%";
+    document.getElementById("labelBox").innerHTML =
+      d.label.replace(/\*\*(.+?)\*\*/, "<strong>$1</strong>");
+
+    setBar("Llm", d.signals.llm.score);
+    setBar("Stylo", d.signals.stylometric.score);
+    setBar("Burst", d.signals.stylometric.metrics.burstiness);
+    setBar("Ttr", d.signals.stylometric.metrics.ttr);
+    setBar("Inf", d.signals.stylometric.metrics.informality);
+    document.getElementById("rationale").textContent =
+      d.signals.llm.ok ? "LLM: " + d.signals.llm.rationale : d.signals.llm.rationale;
+
+    const ac = document.getElementById("appealCard");
+    ac.style.display = d.attribution === "likely_human" ? "none" : "block";
+    document.getElementById("appealCid").textContent = d.content_id;
+    document.getElementById("appealMsg").style.display = "none";
+    document.getElementById("appealError").style.display = "none";
+    loadLog();
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  } finally {
+    document.getElementById("busy").style.display = "none";
+    document.getElementById("submitBtn").disabled = false;
+  }
+}
+
+async function appeal() {
+  const err = document.getElementById("appealError"), msg = document.getElementById("appealMsg");
+  err.style.display = "none"; msg.style.display = "none";
+  try {
+    const res = await fetch("/appeal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content_id: lastContentId,
+                             creator_id: document.getElementById("creator").value,
+                             creator_reasoning: document.getElementById("reason").value })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error + (d.detail ? " (" + d.detail + ")" : ""));
+    msg.textContent = "Status is now “under review”. " + d.message;
+    msg.style.display = "block";
+    loadLog();
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  }
+}
+
+async function loadLog() {
+  const res = await fetch("/log?limit=8");
+  const d = await res.json();
+  const box = document.getElementById("log");
+  if (!d.entries.length) { box.innerHTML = '<span class="conf-cap">Log is empty.</span>'; return; }
+  box.innerHTML = d.entries.map(e => {
+    const t = e.timestamp.replace("T", " ").replace("Z", " UTC");
+    if (e.event === "appeal") {
+      return `<div class="log-entry"><div class="top"><span class="ev">appeal</span>` +
+        `<span class="time">${t}</span></div>` +
+        `<div class="det">“${e.creator_reasoning}” — contesting ` +
+        `${NICE[e.original_decision.attribution]} at ${e.original_decision.confidence}</div></div>`;
+    }
+    return `<div class="log-entry"><div class="top"><span class="ev">classification</span>` +
+      `<span>${NICE[e.attribution]} · ${e.confidence}</span><span class="time">${t}</span></div>` +
+      `<div class="det">llm ${e.llm_score ?? "n/a"} · stylo ${e.stylo_score} · ${e.creator_id}` +
+      `${e.degraded ? " · degraded" : ""}</div></div>`;
+  }).join("");
+}
+loadLog();
+</script>
+</body>
+</html>
