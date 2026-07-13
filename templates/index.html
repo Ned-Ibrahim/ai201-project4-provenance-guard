@@ -308,7 +308,7 @@ async function loadLog() {
     if (e.event === "appeal") {
       return `<div class="log-entry"><div class="top"><span class="ev">appeal</span>` +
         `<span class="time">${t}</span></div>` +
-        `<div class="det">“${e.creator_reasoning}” — contesting ` +
+        `<div class="det">“${e.creator_reasoning}”, contesting ` +
         `${NICE[e.original_decision.attribution]} at ${e.original_decision.confidence}</div></div>`;
     }
     return `<div class="log-entry"><div class="top"><span class="ev">classification</span>` +
